@@ -1,6 +1,16 @@
 # Qlik Cloud Native App for Snowflake Cortex Agents
 
-A Snowflake Native App that wraps the Qlik Cloud Apps REST API as tools for a Cortex Agent. Users can manage Qlik apps (list, get, create, update, delete) through natural language via Snowflake Intelligence.
+A Snowflake Native App that connects to the **Qlik Cloud MCP server** and exposes all Qlik MCP tools (59+) to a **Cortex Agent**. Users interact with Qlik Cloud through natural language via Snowflake Intelligence.
+
+## How It Works
+
+The app uses a single stored procedure (`internal._mcp_call`) that:
+
+1. Authenticates to Qlik Cloud via **OAuth2 client credentials**
+2. Calls the **Qlik MCP server** (`https://<tenant>/api/ai/mcp`) using JSON-RPC
+3. Handles the MCP protocol (initialize session, then tools/call)
+
+The Cortex Agent has one generic tool (`qlik_mcp_call`) that can invoke any of the 59+ Qlik MCP tools by name (e.g., `qlik_search`, `qlik_describe_app`, `qlik_get_fields`, `qlik_create_sheet`, etc.).
 
 ## Prerequisites
 
@@ -9,6 +19,7 @@ A Snowflake Native App that wraps the Qlik Cloud Apps REST API as tools for a Co
   ```bash
   snow connection list
   ```
+- A **Qlik Cloud OAuth2 client** (client ID + client secret) with MCP access
 
 ## Configuration
 
@@ -50,76 +61,36 @@ make run
 make teardown
 ```
 
-## Adding More Qlik API Endpoints
+## App Setup (Post-Install)
 
-This app only wraps a subset of the Qlik Cloud Apps REST API (list, get, create, update, delete).
+Once the app is installed, open the Streamlit UI and follow:
 
-To add a new endpoint, follow these three steps:
+1. **Enter your Qlik tenant hostname** (e.g. `mytenant.us.qlikcloud.com`) and click **Connect** to save it and approve the external access integration.
+2. **Click "Create Agent"** to bind the procedures and create the Cortex Agent.
 
-### 1. Add an internal procedure in `app/sql/apis.sql`
+> **IMPORTANT: An account admin must run:**
+> ```sql
+> GRANT CALLER USAGE ON WAREHOUSE <my_warehouse> TO APPLICATION QLIK_APP;
+> ```
 
-Create a SQL wrapper that calls the generic `_qlik_api_call` with the right method/path:
+## Available Qlik MCP Tools
 
-```sql
-CREATE OR REPLACE PROCEDURE internal._qlik_export_app(app_id STRING)
-RETURNS STRING
-LANGUAGE SQL
-AS
-DECLARE
-    result STRING;
-BEGIN
-    CALL internal._qlik_api_call('POST', '/api/v1/apps/' || :app_id || '/export', NULL, NULL) INTO result;
-    RETURN result;
-END;
-```
+The agent can call any of the 59+ tools on the Qlik MCP server, including:
 
-### 2. Add a public proxy in `app/sql/proxies.sql`
+| Category | Tools |
+|----------|-------|
+| App Discovery | `qlik_search`, `qlik_describe_app`, `qlik_get_fields`, `qlik_list_sheets` |
+| Data Exploration | `qlik_get_field_values`, `qlik_search_field_values`, `qlik_get_chart_data`, `qlik_create_data_object` |
+| Selections | `qlik_select_values`, `qlik_clear_selections`, `qlik_get_current_selections` |
+| Visualization | `qlik_create_sheet`, `qlik_add_chart`, `qlik_add_filter` |
+| Bookmarks | `qlik_list_bookmarks`, `qlik_create_bookmark`, `qlik_select_bookmark` |
+| Master Items | `qlik_list_dimensions`, `qlik_create_dimension`, `qlik_list_measures`, `qlik_create_measure` |
+| Datasets | `qlik_get_dataset`, `qlik_get_dataset_schema`, `qlik_get_dataset_sample` |
+| Lineage | `qlik_get_lineage` |
+| Glossary | `qlik_create_glossary`, `qlik_create_glossary_term`, `qlik_search_glossary_terms` |
+| Data Products | `qlik_create_data_product`, `qlik_get_data_product` |
 
-The proxy is a thin wrapper in the `tools` schema that delegates to the internal proc and is granted to the app role:
-
-```sql
-CREATE OR REPLACE PROCEDURE tools.qlik_export_app(app_id STRING)
-RETURNS STRING
-LANGUAGE SQL
-AS
-DECLARE
-    result STRING;
-BEGIN
-    CALL internal._qlik_export_app(:app_id) INTO result;
-    RETURN result;
-END;
-
-GRANT USAGE ON PROCEDURE tools.qlik_export_app(STRING) TO APPLICATION ROLE app_public;
-```
-
-### 3. Register as an agent tool in `app/sql/agent.sql`
-
-Add the tool spec and tool resource in the agent's YAML specification inside `tools.create_agent()`:
-
-```yaml
-# Under tools:
-  - tool_spec:
-      type: generic
-      name: qlik_export_app
-      description: "Export a Qlik Cloud app to a downloadable file."
-      input_schema:
-        type: object
-        properties:
-          app_id:
-            type: string
-            description: "The Qlik app identifier to export"
-        required: [app_id]
-
-# Under tool_resources:
-  qlik_export_app:
-    identifier: tools.qlik_export_app
-    type: procedure
-    execution_environment:
-      type: warehouse
-      warehouse: ""
-```
-
-After adding all three, redeploy with `make run` and click **Create Agent** in the app UI to recreate the agent with the new tool.
+Full list: https://help.qlik.com/en-US/cloud-services/Subsystems/Hub/Content/Sense_Hub/QlikMCP/Qlik-MCP-server-tools.htm
 
 ## Project Structure
 
@@ -127,7 +98,8 @@ After adding all three, redeploy with `make run` and click **Create Agent** in t
 .
 ├── Makefile              # CLI shortcuts (run, teardown, logs)
 ├── snowflake.yml         # Snow CLI project definition
-├── test_qlik_auth.py    # Local OAuth test script
+├── test_qlik_auth.py     # Local OAuth test script
+├── test_qlik_mcp.py      # Local MCP connection test script
 └── app/
     ├── manifest.yml      # Native App manifest (references, streamlit)
     ├── README.md         # In-app documentation
@@ -136,8 +108,8 @@ After adding all three, redeploy with `make run` and click **Create Agent** in t
     │   └── environment.yml
     └── sql/
         ├── init.sql      # Setup script
-        ├── callbacks.sql # Reference callbacks + config
-        ├── apis.sql      # Qlik API call procedures
-        ├── proxies.sql   # Public proxy procedures
-        └── agent.sql     # Agent creation + run procedures
+        ├── callbacks.sql  # Reference callbacks + tenant config
+        ├── apis.sql       # Single _mcp_call procedure (OAuth + MCP JSON-RPC)
+        ├── proxies.sql    # Public proxy: tools.qlik_mcp_call
+        └── agent.sql      # Agent creation + run procedures
 ```

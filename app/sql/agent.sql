@@ -16,111 +16,32 @@ def main(session):
     if not row or not row[0][0]:
         return "ERROR: Qlik tenant not configured. Set it in the Configuration tab first."
 
-    try:
-        session.sql("SELECT 1 FROM internal.config LIMIT 1").collect()
-    except Exception as e:
-        return f"ERROR: Pre-check failed: {e}"
-
     spec = """models:
   orchestration: auto
 instructions:
-  response: "You are a Qlik Cloud management assistant. Provide concise, accurate answers about Qlik apps. Always return structured results."
-  orchestration: "Use the available Qlik tools to answer questions about Qlik Cloud apps. Use qlik_list_apps to discover apps, qlik_get_app for details, and the other tools for app management operations."
+  response: "You are a Qlik Cloud assistant. Use the qlik_mcp_call tool to interact with Qlik Cloud. Always return clear, structured results."
+  orchestration: "You have a single tool called qlik_mcp_call that connects to the Qlik Cloud MCP server. Available MCP tool names include: qlik_search, qlik_describe_app, qlik_get_fields, qlik_list_sheets, qlik_get_sheet_details, qlik_list_bookmarks, qlik_create_bookmark, qlik_select_bookmark, qlik_delete_bookmark, qlik_get_field_values, qlik_search_field_values, qlik_get_chart_data, qlik_get_chart_info, qlik_create_data_object, qlik_select_values, qlik_clear_selections, qlik_get_current_selections, qlik_create_sheet, qlik_add_chart, qlik_add_filter, qlik_list_dimensions, qlik_create_dimension, qlik_list_measures, qlik_create_measure, qlik_get_lineage, qlik_get_dataset, qlik_get_dataset_schema, qlik_get_dataset_sample. Pass the tool_name and arguments JSON string to qlik_mcp_call."
 tools:
   - tool_spec:
       type: generic
-      name: qlik_list_apps
-      description: "List all Qlik Cloud apps. Returns app IDs, names, and metadata."
+      name: qlik_mcp_call
+      description: "Call any tool on the Qlik Cloud MCP server. Pass the MCP tool name and its arguments as a JSON string."
       input_schema:
         type: object
         properties:
-          limit_val:
-            type: number
-            description: "Maximum number of apps to return (default 20)"
-  - tool_spec:
-      type: generic
-      name: qlik_get_app
-      description: "Get detailed information about a specific Qlik Cloud app by its ID."
-      input_schema:
-        type: object
-        properties:
-          app_id:
+          tool_name:
             type: string
-            description: "The Qlik app identifier (UUID)"
-        required: [app_id]
-  - tool_spec:
-      type: generic
-      name: qlik_create_app
-      description: "Create a new Qlik Cloud app with a given name and optional description."
-      input_schema:
-        type: object
-        properties:
-          app_name:
+            description: "The MCP tool name to invoke (e.g. qlik_search, qlik_describe_app, qlik_get_fields, qlik_list_sheets)"
+          arguments:
             type: string
-            description: "Name for the new app"
-          description:
-            type: string
-            description: "Optional description for the new app"
-        required: [app_name]
-  - tool_spec:
-      type: generic
-      name: qlik_update_app
-      description: "Update an existing Qlik Cloud app name and description."
-      input_schema:
-        type: object
-        properties:
-          app_id:
-            type: string
-            description: "The Qlik app identifier to update"
-          app_name:
-            type: string
-            description: "New name for the app"
-          description:
-            type: string
-            description: "New description for the app"
-        required: [app_id, app_name]
-  - tool_spec:
-      type: generic
-      name: qlik_delete_app
-      description: "Delete a Qlik Cloud app by its ID. This action is irreversible."
-      input_schema:
-        type: object
-        properties:
-          app_id:
-            type: string
-            description: "The Qlik app identifier to delete"
-        required: [app_id]
+            description: "JSON string of arguments for the tool"
+        required: ["tool_name"]
 tool_resources:
-  qlik_list_apps:
-    identifier: tools.qlik_list_apps
+  qlik_mcp_call:
+    identifier: tools.qlik_mcp_call
     type: procedure
     execution_environment:
       type: warehouse
-      warehouse: ""
-  qlik_get_app:
-    identifier: tools.qlik_get_app
-    type: procedure
-    execution_environment:
-      type: warehouse
-      warehouse: ""
-  qlik_create_app:
-    identifier: tools.qlik_create_app
-    type: procedure
-    execution_environment:
-      type: warehouse
-      warehouse: ""
-  qlik_update_app:
-    identifier: tools.qlik_update_app
-    type: procedure
-    execution_environment:
-      type: warehouse
-      warehouse: ""
-  qlik_delete_app:
-    identifier: tools.qlik_delete_app
-    type: procedure
-    execution_environment:
-      type: warehouse
-      warehouse: ""
 """
 
     delim = chr(36) * 2

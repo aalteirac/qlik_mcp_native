@@ -5,3 +5,4 @@ __pycache__/
 .DS_Store
 output/deploy
 .env
+test_qlik_mcp.py

@@ -8,11 +8,7 @@ LANGUAGE SQL
 EXECUTE AS OWNER
 AS
 BEGIN
-    ALTER PROCEDURE internal._qlik_api_call(STRING, STRING, STRING, STRING)
-        SET EXTERNAL_ACCESS_INTEGRATIONS = (reference('qlik_external_access'))
-            SECRETS = ('client_id' = reference('QLIK_CLIENT_ID'), 'client_secret' = reference('QLIK_CLIENT_SECRET'));
-
-    ALTER PROCEDURE tools.get_reference_status()
+    ALTER PROCEDURE internal._mcp_call(STRING, STRING)
         SET EXTERNAL_ACCESS_INTEGRATIONS = (reference('qlik_external_access'))
             SECRETS = ('client_id' = reference('QLIK_CLIENT_ID'), 'client_secret' = reference('QLIK_CLIENT_SECRET'));
 
@@ -83,34 +79,3 @@ BEGIN
 END;
 
 GRANT USAGE ON PROCEDURE tools.set_qlik_tenant(STRING) TO APPLICATION ROLE app_public;
-
-CREATE OR REPLACE PROCEDURE tools.get_reference_status()
-RETURNS STRING
-LANGUAGE PYTHON
-RUNTIME_VERSION = '3.10'
-PACKAGES = ('snowflake-snowpark-python')
-HANDLER = 'main'
-AS $$
-import _snowflake
-import json
-
-def main(session):
-    result = {}
-    try:
-        result["qlik_client_id"] = _snowflake.get_generic_secret_string("client_id")
-    except Exception as e:
-        result["qlik_client_id"] = f"NOT SET ({e})"
-    try:
-        result["qlik_client_secret"] = _snowflake.get_generic_secret_string("client_secret")
-    except Exception as e:
-        result["qlik_client_secret"] = f"NOT SET ({e})"
-    try:
-        row = session.sql("SELECT value FROM internal.config WHERE key = 'qlik_tenant'").collect()
-        result["qlik_tenant"] = row[0][0] if row and row[0][0] else "NOT SET"
-    except Exception:
-        result["qlik_tenant"] = "NOT SET"
-    result["qlik_external_access"] = "BOUND (procedure has EAI)"
-    return json.dumps(result)
-$$;
-
-GRANT USAGE ON PROCEDURE tools.get_reference_status() TO APPLICATION ROLE app_public;
