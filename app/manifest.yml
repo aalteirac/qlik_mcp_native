@@ -1,0 +1,51 @@
+manifest_version: 2
+
+version:
+  name: qlik_app
+  label: "Qlik Cloud Tools for Cortex Agents"
+  comment: "Native App exposing Qlik Cloud Apps API tools for Snowflake Cortex Agent integration"
+
+artifacts:
+  setup_script: sql/init.sql
+  readme: README.md
+  default_streamlit: tools.qlik_agent_ui
+  extension_code: true
+
+privileges:
+  - IMPORTED PRIVILEGES ON SNOWFLAKE DB:
+      description: "Privilege to run agent in the Native App"
+
+
+references:
+  - QLIK_CLIENT_ID:
+      label: "Qlik OAuth Client ID"
+      description: "Secret containing your Qlik Cloud OAuth2 Client ID"
+      privileges:
+        - READ
+      object_type: SECRET
+      register_callback: setup.register_reference
+      configuration_callback: setup.get_configuration_for_reference
+      required_at_setup: true
+  - QLIK_CLIENT_SECRET:
+      label: "Qlik OAuth Client Secret"
+      description: "Secret containing your Qlik Cloud OAuth2 Client Secret"
+      privileges:
+        - READ
+      object_type: SECRET
+      register_callback: setup.register_reference
+      configuration_callback: setup.get_configuration_for_reference
+      required_at_setup: true
+  - QLIK_EXTERNAL_ACCESS:
+      label: "Qlik Cloud API External Access"
+      description: "Required to connect to Qlik Cloud API endpoints"
+      privileges:
+        - USAGE
+      object_type: EXTERNAL ACCESS INTEGRATION
+      register_callback: setup.register_reference
+      configuration_callback: setup.get_configuration_for_reference
+
+configuration:
+  log_level: INFO
+
+lifecycle_callbacks:
+  version_initializer: setup.version_init

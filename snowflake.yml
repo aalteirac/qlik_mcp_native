@@ -1,0 +1,21 @@
+definition_version: 2
+entities:
+  qlik_app_pkg:
+    type: application package
+    stage: app.stage
+    manifest: app/manifest.yml
+    artifacts:
+      - src: app/*
+        dest: ./
+    meta:
+      role: ACCOUNTADMIN
+      warehouse: DEMO_WH
+  qlik_app:
+    type: application
+    identifier:
+      name: qlik_app
+    from:
+      target: qlik_app_pkg
+    meta:
+      role: ACCOUNTADMIN
+      warehouse: DEMO_WH

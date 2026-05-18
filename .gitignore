@@ -1,0 +1,7 @@
+.snow/
+.snowflake/
+__pycache__/
+*.pyc
+.DS_Store
+output/deploy
+.env

@@ -1,0 +1,116 @@
+-- =============================================================================
+-- Qlik Cloud Native App - Reference Callbacks
+-- =============================================================================
+
+CREATE OR REPLACE PROCEDURE internal._bind_procedures()
+RETURNS STRING
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+BEGIN
+    ALTER PROCEDURE internal._qlik_api_call(STRING, STRING, STRING, STRING)
+        SET EXTERNAL_ACCESS_INTEGRATIONS = (reference('qlik_external_access'))
+            SECRETS = ('client_id' = reference('QLIK_CLIENT_ID'), 'client_secret' = reference('QLIK_CLIENT_SECRET'));
+
+    ALTER PROCEDURE tools.get_reference_status()
+        SET EXTERNAL_ACCESS_INTEGRATIONS = (reference('qlik_external_access'))
+            SECRETS = ('client_id' = reference('QLIK_CLIENT_ID'), 'client_secret' = reference('QLIK_CLIENT_SECRET'));
+
+    RETURN 'All procedures bound successfully';
+END;
+
+CREATE OR REPLACE PROCEDURE setup.register_reference(ref_name STRING, operation STRING, ref_or_alias STRING)
+RETURNS STRING
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+BEGIN
+    CASE (operation)
+        WHEN 'ADD' THEN
+            SELECT SYSTEM$SET_REFERENCE(:ref_name, :ref_or_alias);
+        WHEN 'REMOVE' THEN
+            SELECT SYSTEM$REMOVE_REFERENCE(:ref_name, :ref_or_alias);
+        WHEN 'CLEAR' THEN
+            SELECT SYSTEM$REMOVE_ALL_REFERENCES(:ref_name);
+    END CASE;
+
+    IF (UPPER(ref_name) = 'QLIK_EXTERNAL_ACCESS' AND operation = 'ADD') THEN
+        CALL internal._bind_procedures();
+    END IF;
+
+    RETURN 'Reference ' || ref_name || ' ' || operation || ' completed';
+END;
+
+GRANT USAGE ON PROCEDURE setup.register_reference(STRING, STRING, STRING) TO APPLICATION ROLE app_public;
+
+CREATE OR REPLACE PROCEDURE setup.get_configuration_for_reference(ref_name STRING)
+RETURNS STRING
+LANGUAGE SQL
+AS
+DECLARE
+    tenant STRING;
+BEGIN
+    CASE (UPPER(ref_name))
+        WHEN 'QLIK_EXTERNAL_ACCESS' THEN
+            SELECT value INTO tenant FROM internal.config WHERE key = 'qlik_tenant';
+            IF (tenant IS NULL) THEN
+                RETURN '{"type": "ERROR", "payload": {"message": "Qlik tenant not configured. Set it in the app UI first."}}';
+            END IF;
+            RETURN '{"type": "CONFIGURATION", "payload": {"host_ports": ["' || tenant || ':443"], "allowed_secrets": "LIST", "secret_references": ["QLIK_CLIENT_ID", "QLIK_CLIENT_SECRET"]}}';
+        WHEN 'QLIK_CLIENT_ID' THEN
+            RETURN '{"type": "CONFIGURATION", "payload": {"type": "GENERIC_STRING"}}';
+        WHEN 'QLIK_CLIENT_SECRET' THEN
+            RETURN '{"type": "CONFIGURATION", "payload": {"type": "GENERIC_STRING"}}';
+        ELSE
+            RETURN '{"type": "ERROR", "payload": {"message": "Unknown reference: ' || ref_name || '"}}';
+    END CASE;
+END;
+
+GRANT USAGE ON PROCEDURE setup.get_configuration_for_reference(STRING) TO APPLICATION ROLE app_public;
+
+CREATE OR REPLACE PROCEDURE tools.set_qlik_tenant(hostname STRING)
+RETURNS STRING
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+BEGIN
+    MERGE INTO internal.config AS t
+    USING (SELECT 'qlik_tenant' AS key, :hostname AS value) AS s
+    ON t.key = s.key
+    WHEN MATCHED THEN UPDATE SET value = s.value
+    WHEN NOT MATCHED THEN INSERT (key, value) VALUES (s.key, s.value);
+    RETURN 'Tenant set to: ' || hostname;
+END;
+
+GRANT USAGE ON PROCEDURE tools.set_qlik_tenant(STRING) TO APPLICATION ROLE app_public;
+
+CREATE OR REPLACE PROCEDURE tools.get_reference_status()
+RETURNS STRING
+LANGUAGE PYTHON
+RUNTIME_VERSION = '3.10'
+PACKAGES = ('snowflake-snowpark-python')
+HANDLER = 'main'
+AS $$
+import _snowflake
+import json
+
+def main(session):
+    result = {}
+    try:
+        result["qlik_client_id"] = _snowflake.get_generic_secret_string("client_id")
+    except Exception as e:
+        result["qlik_client_id"] = f"NOT SET ({e})"
+    try:
+        result["qlik_client_secret"] = _snowflake.get_generic_secret_string("client_secret")
+    except Exception as e:
+        result["qlik_client_secret"] = f"NOT SET ({e})"
+    try:
+        row = session.sql("SELECT value FROM internal.config WHERE key = 'qlik_tenant'").collect()
+        result["qlik_tenant"] = row[0][0] if row and row[0][0] else "NOT SET"
+    except Exception:
+        result["qlik_tenant"] = "NOT SET"
+    result["qlik_external_access"] = "BOUND (procedure has EAI)"
+    return json.dumps(result)
+$$;
+
+GRANT USAGE ON PROCEDURE tools.get_reference_status() TO APPLICATION ROLE app_public;
