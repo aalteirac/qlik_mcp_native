@@ -52,7 +52,7 @@ make teardown
 
 ## Adding More Qlik API Endpoints
 
-This app only wraps a subset of the Qlik Cloud Apps REST API (list, get, create, update, delete). The full API reference is at https://qlik.dev/apis/rest/apps/.
+This app only wraps a subset of the Qlik Cloud Apps REST API (list, get, create, update, delete).
 
 To add a new endpoint, follow these three steps:
 
