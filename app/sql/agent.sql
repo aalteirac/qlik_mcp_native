@@ -41,7 +41,8 @@ tool_resources:
     identifier: tools.qlik_mcp_call
     type: procedure
     execution_environment:
-      type: warehouse
+      type: "warehouse"
+      warehouse: ""
 """
 
     delim = chr(36) * 2
