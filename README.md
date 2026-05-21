@@ -6,9 +6,11 @@ A Snowflake Native App that connects to the **Qlik Cloud MCP server** and expose
 
 The app uses a single stored procedure (`internal._mcp_call`) that:
 
-1. Authenticates to Qlik Cloud via **OAuth2 client credentials**
-2. Calls the **Qlik MCP server** (`https://<tenant>/api/ai/mcp`) using JSON-RPC
-3. Handles the MCP protocol (initialize session, then tools/call)
+1. Authenticates to Qlik Cloud via **OAuth2 client credentials** (machine token)
+2. Exchanges the M2M token for a **user-scoped token** via OAuth Token Exchange (RFC 8693), impersonating the calling Snowflake user using their email
+3. Calls the **Qlik MCP server** (`https://<tenant>/api/ai/mcp`) using JSON-RPC with the user-scoped token
+
+This means each Snowflake user calling the agent acts as their matching Qlik user (respecting their permissions, spaces, role-based access, etc.).
 
 The Cortex Agent has one generic tool (`qlik_mcp_call`) that can invoke any of the 59+ Qlik MCP tools by name (e.g., `qlik_search`, `qlik_describe_app`, `qlik_get_fields`, `qlik_create_sheet`, etc.).
 
@@ -19,7 +21,11 @@ The Cortex Agent has one generic tool (`qlik_mcp_call`) that can invoke any of t
   ```bash
   snow connection list
   ```
-- A **Qlik Cloud OAuth2 client** (client ID + client secret) with MCP access
+- A **Qlik Cloud OAuth2 M2M client** with:
+  - `client_credentials` grant type
+  - `urn:qlik:oauth:user-impersonation` grant type (Token Exchange) **enabled**
+  - Permission to access the Qlik MCP server
+- **Each Snowflake user must have an email set on their Snowflake account that matches a Qlik Cloud user's email.**
 
 ## Configuration
 

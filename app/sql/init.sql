@@ -17,6 +17,11 @@ CREATE TABLE IF NOT EXISTS internal.config (
     value STRING
 );
 
+CREATE TABLE IF NOT EXISTS internal.user_subject_map (
+    snowflake_user STRING PRIMARY KEY,
+    qlik_subject STRING
+);
+
 -- GRANT USAGE ON SCHEMA internal TO APPLICATION ROLE app_public;
 -- GRANT SELECT ON TABLE internal.config TO APPLICATION ROLE app_public;
 

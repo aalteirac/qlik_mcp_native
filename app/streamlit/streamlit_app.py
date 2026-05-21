@@ -99,6 +99,40 @@ with tab_config:
     else:
         st.info("Complete Step 1 and approve the external access integration first.")
 
+    st.markdown("---")
+    st.markdown("#### User Mappings")
+    st.caption("Map Snowflake users to their Qlik subject ID (e.g. auth0|...) to enable per-user impersonation.")
+
+    try:
+        mappings = session.sql("CALL tools.list_user_mappings()").collect()
+        if mappings:
+            for m in mappings:
+                col_u, col_s, col_d = st.columns([2, 4, 1])
+                col_u.code(m["SNOWFLAKE_USER"])
+                col_s.code(m["QLIK_SUBJECT"])
+                if col_d.button("Delete", key=f"del_{m['SNOWFLAKE_USER']}"):
+                    session.call("tools.delete_user_mapping", m["SNOWFLAKE_USER"])
+                    st.rerun()
+        else:
+            st.info("No user mappings yet. Add one below.")
+    except Exception as e:
+        st.error(f"Failed to load mappings: {e}")
+
+    with st.form("add_mapping", clear_on_submit=True):
+        st.markdown("**Add or update a mapping**")
+        new_user = st.text_input("Snowflake username", placeholder="ANTHONY")
+        new_subject = st.text_input("Qlik subject ID", placeholder="auth0|abc123...")
+        if st.form_submit_button("Save Mapping"):
+            if new_user and new_subject:
+                try:
+                    result = session.call("tools.set_user_mapping", new_user, new_subject)
+                    st.success(result)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed: {e}")
+            else:
+                st.warning("Both fields are required.")
+
 # =============================================================================
 # TAB 2 — Test Agent
 # =============================================================================
@@ -121,6 +155,16 @@ with tab_agent:
         with st.chat_message("assistant"):
             with st.spinner("Agent is thinking..."):
                 try:
+                    sf_user = None
+                    try:
+                        sf_user = st.experimental_user.get("user_name") or st.experimental_user.get("login_name")
+                    except Exception:
+                        pass
+                    if not sf_user:
+                        sf_user = session.sql("SELECT CURRENT_USER()").collect()[0][0]
+                    st.caption(f"Active user: `{sf_user}`")
+                    if sf_user:
+                        session.call("tools.set_active_user", sf_user)
                     raw = session.call("tools.run_agent", prompt)
                     parsed = json.loads(raw) if isinstance(raw, str) else raw
                     content_parts = parsed.get("content", [])
