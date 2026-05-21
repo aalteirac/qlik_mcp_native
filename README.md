@@ -7,10 +7,11 @@ A Snowflake Native App that connects to the **Qlik Cloud MCP server** and expose
 The app uses a single stored procedure (`internal._mcp_call`) that:
 
 1. Authenticates to Qlik Cloud via **OAuth2 client credentials** (machine token)
-2. Exchanges the M2M token for a **user-scoped token** via OAuth Token Exchange (RFC 8693), impersonating the calling Snowflake user using their email
-3. Calls the **Qlik MCP server** (`https://<tenant>/api/ai/mcp`) using JSON-RPC with the user-scoped token
+2. Resolves the calling Snowflake user (captured by Streamlit via `st.experimental_user`) and looks up their **Qlik subject ID** in the `internal.user_subject_map` mapping table
+3. Exchanges the M2M token for a **user-scoped token** via OAuth Token Exchange (RFC 8693), using `urn:qlik:oauth:user-impersonation` with `user_lookup.field = subject`
+4. Calls the **Qlik MCP server** (`https://<tenant>/api/ai/mcp`) using JSON-RPC with the user-scoped token
 
-This means each Snowflake user calling the agent acts as their matching Qlik user (respecting their permissions, spaces, role-based access, etc.).
+This means each Snowflake user calling the agent acts as their mapped Qlik user (respecting their permissions, spaces, role-based access, etc.). Mappings are managed from the Configuration tab in the Streamlit UI.
 
 The Cortex Agent has one generic tool (`qlik_mcp_call`) that can invoke any of the 59+ Qlik MCP tools by name (e.g., `qlik_search`, `qlik_describe_app`, `qlik_get_fields`, `qlik_create_sheet`, etc.).
 
@@ -25,7 +26,7 @@ The Cortex Agent has one generic tool (`qlik_mcp_call`) that can invoke any of t
   - `client_credentials` grant type
   - `urn:qlik:oauth:user-impersonation` grant type (Token Exchange) **enabled**
   - Permission to access the Qlik MCP server
-- **Each Snowflake user must have an email set on their Snowflake account that matches a Qlik Cloud user's email.**
+- **Each Snowflake user that uses the agent must be mapped to their Qlik subject ID** (e.g. `auth0|abc123...`) in the app's User Mappings UI. Find the subject ID in the Qlik Management Console > Users.
 
 ## Configuration
 
@@ -73,6 +74,7 @@ Once the app is installed, open the Streamlit UI and follow:
 
 1. **Enter your Qlik tenant hostname** (e.g. `mytenant.us.qlikcloud.com`) and click **Connect** to save it and approve the external access integration.
 2. **Click "Create Agent"** to bind the procedures and create the Cortex Agent.
+3. **Add User Mappings** for each Snowflake user that will use the agent: map their Snowflake username to their Qlik subject ID (e.g. `auth0|...`). Without a mapping, calls will fail with "No Qlik subject mapping for Snowflake user".
 
 > **IMPORTANT: An account admin must run:**
 > ```sql

@@ -12,10 +12,11 @@ Install from the application package. During setup you will be prompted to provi
 
 ### 2. Configure in the app UI
 
-Open the app's Streamlit interface and follow the two steps:
+Open the app's Streamlit interface and follow the steps:
 
 1. **Enter your Qlik tenant hostname** (e.g. `mytenant.us.qlikcloud.com`) and click **Connect**. This saves the tenant and prompts you to approve the external access integration.
 2. Once the EAI is approved, click **Create Agent** to deploy the Cortex Agent with all Qlik tools.
+3. **Add User Mappings**: for each Snowflake user that will use the agent, add a mapping from their Snowflake username to their Qlik subject ID (e.g. `auth0|abc123...`). The Qlik MCP server will execute calls under the impersonated user's permissions. The Qlik OAuth client must have the **Token Exchange** grant type (`urn:qlik:oauth:user-impersonation`) enabled.
 
 ### 3. Grant warehouse access
 
