@@ -8,7 +8,7 @@ LANGUAGE SQL
 EXECUTE AS OWNER
 AS
 BEGIN
-    ALTER PROCEDURE internal._mcp_call(STRING, STRING)
+    ALTER PROCEDURE internal._mcp_call(STRING, STRING, STRING)
         SET EXTERNAL_ACCESS_INTEGRATIONS = (reference('qlik_external_access'))
             SECRETS = ('client_id' = reference('QLIK_CLIENT_ID'), 'client_secret' = reference('QLIK_CLIENT_SECRET'));
 
@@ -79,3 +79,60 @@ BEGIN
 END;
 
 GRANT USAGE ON PROCEDURE tools.set_qlik_tenant(STRING) TO APPLICATION ROLE app_public;
+
+CREATE OR REPLACE PROCEDURE tools.set_active_user(email STRING)
+RETURNS STRING
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+BEGIN
+    SYSTEM$LOG_INFO('set_active_user: called with email=' || COALESCE(:email, 'NULL'));
+    MERGE INTO internal.config AS t
+    USING (SELECT 'active_user' AS key, :email AS value) AS s
+    ON t.key = s.key
+    WHEN MATCHED THEN UPDATE SET value = s.value
+    WHEN NOT MATCHED THEN INSERT (key, value) VALUES (s.key, s.value);
+    RETURN 'Active user set to: ' || email;
+END;
+
+GRANT USAGE ON PROCEDURE tools.set_active_user(STRING) TO APPLICATION ROLE app_public;
+
+CREATE OR REPLACE PROCEDURE tools.set_user_mapping(snowflake_user STRING, qlik_subject STRING)
+RETURNS STRING
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+BEGIN
+    MERGE INTO internal.user_subject_map AS t
+    USING (SELECT :snowflake_user AS snowflake_user, :qlik_subject AS qlik_subject) AS s
+    ON t.snowflake_user = s.snowflake_user
+    WHEN MATCHED THEN UPDATE SET qlik_subject = s.qlik_subject
+    WHEN NOT MATCHED THEN INSERT (snowflake_user, qlik_subject) VALUES (s.snowflake_user, s.qlik_subject);
+    RETURN 'Mapping saved: ' || snowflake_user || ' -> ' || qlik_subject;
+END;
+
+GRANT USAGE ON PROCEDURE tools.set_user_mapping(STRING, STRING) TO APPLICATION ROLE app_public;
+
+CREATE OR REPLACE PROCEDURE tools.delete_user_mapping(snowflake_user STRING)
+RETURNS STRING
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+BEGIN
+    DELETE FROM internal.user_subject_map WHERE snowflake_user = :snowflake_user;
+    RETURN 'Mapping deleted for: ' || snowflake_user;
+END;
+
+GRANT USAGE ON PROCEDURE tools.delete_user_mapping(STRING) TO APPLICATION ROLE app_public;
+
+CREATE OR REPLACE PROCEDURE tools.list_user_mappings()
+RETURNS TABLE(snowflake_user STRING, qlik_subject STRING)
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+BEGIN
+    LET res RESULTSET := (SELECT snowflake_user, qlik_subject FROM internal.user_subject_map ORDER BY snowflake_user);
+    RETURN TABLE(res);
+END;
+
+GRANT USAGE ON PROCEDURE tools.list_user_mappings() TO APPLICATION ROLE app_public;

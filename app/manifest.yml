@@ -47,5 +47,9 @@ references:
 configuration:
   log_level: INFO
 
+restricted_callers_rights:
+  enabled: true
+  description: "Used to capture the invoking user's identity for Qlik impersonation."
+
 lifecycle_callbacks:
   version_initializer: setup.version_init
